@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Raw p5 Chat Game</title>
+    <title>SpacetimeDB Chat Game</title>
     <link rel="stylesheet" href="./src/style.css" />
   </head>
   <body>
@@ -19,6 +19,16 @@
       <input type="text" id="chatInput" placeholder="Type message..." />
       <button id="sendButton">Send</button>
     </div>
+
+    <!-- Mobile controls overlay -->
+    <div id="mobile-controls">
+      <div id="joystick-area">
+        <div id="joystick-base"></div>
+        <div id="joystick-stick"></div>
+      </div>
+      <div id="shoot-button">SHOOT</div>
+    </div>
+
     <script type="module" src="./src/sketch.ts"></script>
   </body>
 </html>

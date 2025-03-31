@@ -3,18 +3,22 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
+  "homepage": "https://github.com/emiljannesson/chat-game-client",
   "scripts": {
+    "predeploy": "npm run build",
+    "deploy": "gh-pages -d dist",
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview"
   },
   "devDependencies": {
+    "@types/p5": "^1.7.6",
+    "gh-pages": "^6.3.0",
     "typescript": "^5.3.3",
-    "vite": "^5.1.5",
-    "@types/p5": "^1.7.6"
+    "vite": "^5.1.5"
   },
   "dependencies": {
     "@clockworklabs/spacetimedb-sdk": "^1.0.2",
     "p5": "^1.9.2"
   }
-} 
+}

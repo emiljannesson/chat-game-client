@@ -40,6 +40,18 @@ let localPlayerPos = { x: CANVAS_WIDTH / 2, y: CANVAS_HEIGHT / 2 }; // Make loca
 let lastMoveSentTime = 0;
 let lastMoveDirection = { dx: 1, dy: 0 }; // Start facing right by default
 
+// Canvas and Scaling State
+let canvasScaleFactor = 1;
+let canvasRealWidth = CANVAS_WIDTH;
+let canvasRealHeight = CANVAS_HEIGHT;
+let isPortraitMode = false; // Track orientation
+
+// Mobile Controls State
+let joystickActive = false;
+let joystickData = { x: 0, y: 0, angle: 0, distance: 0 };
+let shootButtonActive = false;
+let isMobileDevice = false;
+
 // Visual Effect State
 let particles: Particle[] = [];
 let screenShake = { active: false, duration: 0, intensity: 0, startTime: 0 };
@@ -510,6 +522,10 @@ let chatInput: HTMLInputElement;
 let sendButton: HTMLButtonElement;
 let connectionStatusSpan: HTMLElement;
 let sketchHolder: HTMLElement;
+// Mobile Control Elements
+let joystickArea: HTMLElement;
+let joystickStick: HTMLElement;
+let shootButton: HTMLElement;
 
 // --- SpacetimeDB Event Handlers ---
 const handleUserInsert = (_ctx: any, user: User) => {
@@ -637,6 +653,19 @@ const handleEnemyUpdate = (_ctx: any, oldEnemy: Enemy, newEnemy: Enemy) => {
       newEnemy.y,
       damageAmount,
       newEnemy.enemyType === EnemyType.Boss
+    );
+  }
+
+  // Ensure enemies stay in visible bounds in portrait mode
+  if (isPortraitMode) {
+    // Constrain enemy position to visible area
+    newEnemy.x = Math.max(
+      PLAYER_SIZE,
+      Math.min(newEnemy.x, CANVAS_WIDTH - PLAYER_SIZE)
+    );
+    newEnemy.y = Math.max(
+      PLAYER_SIZE,
+      Math.min(newEnemy.y, CANVAS_HEIGHT - PLAYER_SIZE)
     );
   }
 
@@ -965,6 +994,182 @@ function updateUIForConnection(connected: boolean) {
   }
 }
 
+// Function to update canvas size based on container
+function updateCanvasSize() {
+  const container = sketchHolder;
+  if (!container) return;
+
+  const containerWidth = container.clientWidth;
+  const containerHeight = container.clientHeight;
+
+  // Detect if we're in portrait mode
+  isPortraitMode = window.innerHeight > window.innerWidth;
+
+  // Calculate scale factor to fit the game world in the container
+  const scaleX = containerWidth / CANVAS_WIDTH;
+  const scaleY = containerHeight / CANVAS_HEIGHT;
+
+  // In portrait mode, prioritize fitting width
+  canvasScaleFactor = isPortraitMode ? scaleX : Math.min(scaleX, scaleY);
+
+  // Update real canvas dimensions
+  canvasRealWidth = CANVAS_WIDTH * canvasScaleFactor;
+  canvasRealHeight = CANVAS_HEIGHT * canvasScaleFactor;
+
+  // Update control positions when canvas size changes
+  if (joystickArea && shootButton) {
+    updateControlPositions();
+  }
+}
+
+// Setup mobile controls
+function setupMobileControls() {
+  // Check if likely a mobile device
+  isMobileDevice =
+    /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+      navigator.userAgent
+    );
+
+  // Show mobile controls based on device or screen size
+  const usesMobileControls = isMobileDevice || window.innerWidth <= 1024;
+  const mobileControls = document.getElementById("mobile-controls");
+
+  if (!usesMobileControls) {
+    // Hide mobile controls on desktop/large screens
+    if (mobileControls) mobileControls.style.display = "none";
+    return;
+  } else if (mobileControls) {
+    mobileControls.style.display = "block";
+  }
+
+  // Get joystick elements
+  joystickArea = document.getElementById("joystick-area")!;
+  joystickStick = document.getElementById("joystick-stick")!;
+  shootButton = document.getElementById("shoot-button")!;
+
+  // Position controls relative to the game canvas size
+  updateControlPositions();
+
+  // Joystick touch handlers
+  joystickArea.addEventListener("touchstart", handleJoystickStart, {
+    passive: false,
+  });
+  joystickArea.addEventListener("touchmove", handleJoystickMove, {
+    passive: false,
+  });
+  joystickArea.addEventListener("touchend", handleJoystickEnd, {
+    passive: false,
+  });
+
+  // Shoot button handler
+  shootButton.addEventListener("touchstart", (e) => {
+    e.preventDefault();
+    shootButtonActive = true;
+  });
+
+  // Update positions on resize
+  window.addEventListener("resize", updateControlPositions);
+
+  console.log("Mobile controls initialized");
+}
+
+// Update mobile control positions
+function updateControlPositions() {
+  if (!sketchHolder) return;
+
+  // Ensure controls stay inside the game area
+  const bounds = sketchHolder.getBoundingClientRect();
+
+  if (joystickArea) {
+    const joystickSize = isPortraitMode
+      ? Math.min(bounds.width * 0.22, 90) // Slightly smaller in portrait
+      : Math.min(bounds.width * 0.25, 100);
+    joystickArea.style.width = `${joystickSize}px`;
+    joystickArea.style.height = `${joystickSize}px`;
+  }
+
+  if (shootButton) {
+    const buttonSize = isPortraitMode
+      ? Math.min(bounds.width * 0.18, 70) // Slightly smaller in portrait
+      : Math.min(bounds.width * 0.2, 80);
+    shootButton.style.width = `${buttonSize}px`;
+    shootButton.style.height = `${buttonSize}px`;
+  }
+}
+
+// Joystick handlers
+function handleJoystickStart(e: TouchEvent) {
+  e.preventDefault();
+  joystickActive = true;
+  updateJoystickPosition(e.touches[0]);
+}
+
+function handleJoystickMove(e: TouchEvent) {
+  e.preventDefault();
+  if (joystickActive) {
+    updateJoystickPosition(e.touches[0]);
+  }
+}
+
+function handleJoystickEnd(e: TouchEvent) {
+  e.preventDefault();
+  joystickActive = false;
+  resetJoystick();
+}
+
+function updateJoystickPosition(touch: Touch) {
+  const rect = joystickArea.getBoundingClientRect();
+  const centerX = rect.width / 2;
+  const centerY = rect.height / 2;
+
+  // Calculate touch position relative to joystick center
+  const touchX = touch.clientX - rect.left;
+  const touchY = touch.clientY - rect.top;
+
+  // Calculate direction vector from center
+  const deltaX = touchX - centerX;
+  const deltaY = touchY - centerY;
+
+  // Calculate distance from center
+  const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+  const maxDistance = rect.width / 2;
+
+  // Normalize to get direction
+  let normalizedX = 0;
+  let normalizedY = 0;
+
+  if (distance > 0) {
+    normalizedX = deltaX / distance;
+    normalizedY = deltaY / distance;
+  }
+
+  // Constrain stick movement to the base radius
+  const stickDistance = Math.min(distance, maxDistance);
+  const stickX = centerX + normalizedX * stickDistance;
+  const stickY = centerY + normalizedY * stickDistance;
+
+  // Update stick position visually
+  joystickStick.style.left = `${stickX}px`;
+  joystickStick.style.top = `${stickY}px`;
+
+  // Update joystick data for game logic
+  joystickData = {
+    x: normalizedX,
+    y: normalizedY,
+    angle: Math.atan2(normalizedY, normalizedX),
+    distance: stickDistance / maxDistance, // 0 to 1 for intensity
+  };
+}
+
+function resetJoystick() {
+  // Reset stick position to center
+  joystickStick.style.left = "50%";
+  joystickStick.style.top = "50%";
+
+  // Reset joystick data
+  joystickData = { x: 0, y: 0, angle: 0, distance: 0 };
+}
+
 // --- p5.js Sketch Definition ---
 const sketch = (p: p5) => {
   // Store p5 instance for death effect
@@ -975,8 +1180,12 @@ const sketch = (p: p5) => {
 
   p.setup = () => {
     console.log("p5 setup");
-    const canvas = p.createCanvas(CANVAS_WIDTH, CANVAS_HEIGHT);
+
+    // Create canvas that fills the container while maintaining aspect ratio
+    updateCanvasSize();
+    const canvas = p.createCanvas(canvasRealWidth, canvasRealHeight);
     canvas.parent(sketchHolder); // Attach canvas to the holder div
+
     p.textAlign(p.CENTER, p.CENTER);
     p.frameRate(60);
 
@@ -990,9 +1199,6 @@ const sketch = (p: p5) => {
       const types = ["ring", "hex", "grid"];
       bgEffects.push(new BackgroundEffect(p, types[i % types.length]));
     }
-
-    // Create boss sparkle effect
-    // bossSparkle = p.createGraphics(150, 150);
 
     // Initialize global local position based on server state if available
     // This helps if reconnecting and server already has a position stored
@@ -1019,9 +1225,30 @@ const sketch = (p: p5) => {
       localPlayerPos = { x: CANVAS_WIDTH / 2, y: CANVAS_HEIGHT / 2 };
     }
     // The onConnect handler will now send this initial position to the server
+
+    // Handle window resize
+    window.addEventListener("resize", () => {
+      updateCanvasSize();
+      p.resizeCanvas(canvasRealWidth, canvasRealHeight);
+    });
   };
 
   p.draw = () => {
+    // Clear the background first
+    p.background(0);
+
+    // Apply the scaling factor
+    p.scale(canvasScaleFactor);
+
+    // In portrait mode, center the game world vertically
+    if (isPortraitMode) {
+      const yOffset =
+        (canvasRealHeight / canvasScaleFactor - CANVAS_HEIGHT) / 2;
+      if (yOffset > 0) {
+        p.translate(0, yOffset);
+      }
+    }
+
     // Calculate screen shake offset
     let shakeX = 0;
     let shakeY = 0;
@@ -1088,11 +1315,11 @@ const sketch = (p: p5) => {
     // Draw subtle grid lines
     p.stroke(100, 30);
     p.strokeWeight(1);
-    for (let x = 0; x < CANVAS_WIDTH; x += 30) {
-      p.line(x, 0, x, CANVAS_HEIGHT);
+    for (let x = 0; x < canvasRealWidth; x += 30) {
+      p.line(x, 0, x, canvasRealHeight);
     }
-    for (let y = 0; y < CANVAS_HEIGHT; y += 30) {
-      p.line(0, y, CANVAS_WIDTH, y);
+    for (let y = 0; y < canvasRealHeight; y += 30) {
+      p.line(0, y, canvasRealWidth, y);
     }
 
     const currentTime = Date.now(); // Get current time for prediction
@@ -1465,9 +1692,9 @@ const sketch = (p: p5) => {
       // Check bounds/lifetime
       if (
         predictedX < -PLAYER_SIZE ||
-        predictedX > CANVAS_WIDTH + PLAYER_SIZE ||
+        predictedX > canvasRealWidth + PLAYER_SIZE ||
         predictedY < -PLAYER_SIZE ||
-        predictedY > CANVAS_HEIGHT + PLAYER_SIZE ||
+        predictedY > canvasRealHeight + PLAYER_SIZE ||
         timeElapsedSeconds > 10
       ) {
         projectilesToDelete.add(id);
@@ -1579,6 +1806,13 @@ const sketch = (p: p5) => {
       if (p.keyIsDown(p.RIGHT_ARROW) || p.keyIsDown(68)) dx += 1; // D
       if (p.keyIsDown(p.UP_ARROW) || p.keyIsDown(87)) dy -= 1; // W
       if (p.keyIsDown(p.DOWN_ARROW) || p.keyIsDown(83)) dy += 1; // S
+
+      // Use joystick input if active
+      if (joystickActive && joystickData.distance > 0) {
+        // Override keyboard input if joystick is being used
+        dx = joystickData.x;
+        dy = joystickData.y;
+      }
     }
 
     if (dx !== 0 || dy !== 0) {
@@ -1600,12 +1834,12 @@ const sketch = (p: p5) => {
       const newX = p.constrain(
         currentPos.x + moveX,
         PLAYER_SIZE / 2,
-        CANVAS_WIDTH - PLAYER_SIZE / 2
+        canvasRealWidth - PLAYER_SIZE / 2
       );
       const newY = p.constrain(
         currentPos.y + moveY,
         PLAYER_SIZE / 2,
-        CANVAS_HEIGHT - PLAYER_SIZE / 2
+        canvasRealHeight - PLAYER_SIZE / 2
       );
 
       if (newX !== currentPos.x || newY !== currentPos.y) {
@@ -1623,6 +1857,43 @@ const sketch = (p: p5) => {
         }
       }
     }
+
+    // Check if shoot button is active
+    if (shootButtonActive) {
+      shootButtonActive = false; // Reset after processing
+      handleShoot();
+    }
+  };
+
+  // Function to handle shooting (reused for all shooting triggers)
+  const handleShoot = () => {
+    if (isConnected && dbConnection?.reducers?.shoot) {
+      // Calculate a target point slightly ahead in the last direction
+      const targetX = localPlayerPos.x + lastMoveDirection.dx * 50; // 50 pixels ahead
+      const targetY = localPlayerPos.y + lastMoveDirection.dy * 50;
+      console.log(
+        `Shooting towards ${targetX.toFixed(1)}, ${targetY.toFixed(1)}`
+      );
+
+      try {
+        dbConnection.reducers.shoot(targetX, targetY);
+
+        // Create muzzle flash effect at player position
+        if (localIdentity) {
+          const playerColor = p.color(100, 150, 255);
+          createExplosion(
+            p,
+            localPlayerPos.x,
+            localPlayerPos.y,
+            playerColor,
+            5,
+            2
+          );
+        }
+      } catch (e) {
+        console.error("Error calling shoot reducer:", e);
+      }
+    }
   };
 
   // Keep keyPressed mainly for preventing default actions and handling non-movement keys
@@ -1633,34 +1904,7 @@ const sketch = (p: p5) => {
     // Shoot Forward (Space or F)
     if (!isTyping && (p.keyCode === 32 || p.keyCode === 70)) {
       // 32 = Space, 70 = F
-      if (isConnected && dbConnection?.reducers?.shoot) {
-        // Calculate a target point slightly ahead in the last direction
-        const targetX = localPlayerPos.x + lastMoveDirection.dx * 50; // 50 pixels ahead
-        const targetY = localPlayerPos.y + lastMoveDirection.dy * 50;
-        console.log(
-          `Shooting Forward towards ${targetX.toFixed(1)}, ${targetY.toFixed(
-            1
-          )}`
-        );
-        try {
-          dbConnection.reducers.shoot(targetX, targetY);
-
-          // Create muzzle flash effect at player position
-          if (localIdentity) {
-            const playerColor = p.color(100, 150, 255);
-            createExplosion(
-              p,
-              localPlayerPos.x,
-              localPlayerPos.y,
-              playerColor,
-              5,
-              2
-            );
-          }
-        } catch (e) {
-          console.error("Error calling shoot reducer (forward):", e);
-        }
-      }
+      handleShoot();
       return false; // Prevent default spacebar action (scrolling) or typing 'f'
     }
 
@@ -1736,28 +1980,34 @@ const sketch = (p: p5) => {
       dbConnection?.reducers?.shoot &&
       !isTyping &&
       p.mouseX >= 0 &&
-      p.mouseX <= CANVAS_WIDTH &&
+      p.mouseX <= canvasRealWidth &&
       p.mouseY >= 0 &&
-      p.mouseY <= CANVAS_HEIGHT
+      p.mouseY <= canvasRealHeight
     ) {
-      console.log(`Shooting towards ${p.mouseX}, ${p.mouseY}`);
-      try {
-        dbConnection.reducers.shoot(p.mouseX, p.mouseY);
+      // Convert mouse position from real screen coordinates to game coordinates
+      const gameX = p.mouseX / canvasScaleFactor;
+      const gameY = p.mouseY / canvasScaleFactor;
 
-        // Create muzzle flash effect at player position
-        if (localIdentity) {
-          const playerColor = p.color(100, 150, 255);
-          createExplosion(
-            p,
-            localPlayerPos.x,
-            localPlayerPos.y,
-            playerColor,
-            5,
-            2
-          );
+      // Update shooting with mouse position
+      if (isConnected && dbConnection?.reducers?.shoot) {
+        try {
+          dbConnection.reducers.shoot(gameX, gameY);
+
+          // Create muzzle flash effect at player position
+          if (localIdentity) {
+            const playerColor = p.color(100, 150, 255);
+            createExplosion(
+              p,
+              localPlayerPos.x,
+              localPlayerPos.y,
+              playerColor,
+              5,
+              2
+            );
+          }
+        } catch (e) {
+          console.error("Error calling shoot reducer:", e);
         }
-      } catch (e) {
-        console.error("Error calling shoot reducer:", e);
       }
     }
     // Prevent default right-click context menu if needed
@@ -1776,6 +2026,9 @@ document.addEventListener("DOMContentLoaded", () => {
   sendButton = document.getElementById("sendButton") as HTMLButtonElement;
   connectionStatusSpan = document.getElementById("connectionStatus")!;
   sketchHolder = document.getElementById("sketch-holder")!;
+
+  // Setup mobile controls
+  setupMobileControls();
 
   // Add UI Event Listeners
   setNameButton.addEventListener("click", () => {
