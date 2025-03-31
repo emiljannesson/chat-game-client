@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Raw p5 Chat Game</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <div id="controls">
+      <label for="nameInput">Name:</label>
+      <input type="text" id="nameInput" placeholder="Enter name..." />
+      <button id="setNameButton">Set Name</button>
+      <span id="connectionStatus">Connecting...</span>
+    </div>
+    <div id="sketch-holder"></div>
+    <!-- p5 canvas will go here -->
+    <div id="chat">
+      <input type="text" id="chatInput" placeholder="Type message..." />
+      <button id="sendButton">Send</button>
+    </div>
+    <script type="module" src="/src/sketch.ts"></script>
+  </body>
+</html>

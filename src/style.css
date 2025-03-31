@@ -1,0 +1,47 @@
+body {
+  margin: 0;
+  font-family: sans-serif;
+  background-color: #222;
+  color: #eee;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 10px;
+}
+
+#controls,
+#chat {
+  margin-bottom: 10px;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+#sketch-holder {
+  margin-bottom: 10px;
+  /* Prevent layout shifts */
+  min-width: 600px;
+  min-height: 400px;
+}
+
+canvas {
+  display: block;
+  border: 1px solid #555;
+}
+
+input[type="text"] {
+  padding: 5px;
+  background-color: #444;
+  border: 1px solid #666;
+  color: #eee;
+}
+
+button {
+  padding: 5px 10px;
+}
+
+#connectionStatus {
+  margin-left: 15px;
+  font-style: italic;
+  color: #aaa;
+}
